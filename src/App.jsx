@@ -8,15 +8,8 @@ import SkillDecay from "./components/modules/SkillDecay.jsx";
 import InterviewPrep from "./components/modules/InterviewPrep.jsx";
 import JobDiscovery from "./components/modules/JobDiscovery.jsx";
 import { SAMPLE_RESUME, SAMPLE_JD } from "./constants/sampleData.js";
-import {
-  analyzeMatchScore,
-  analyzePersonas,
-  analyzeSkillGap,
-  analyzeSkillDecay,
-  analyzeInterviewQuestions,
-  analyzeJobDiscovery,
-} from "./services/gemini.js";
-import { Sparkles, BarChart2, Users, GitBranch, Clock, MessageSquare, Briefcase, Menu, X } from "lucide-react";
+import { analyzeAll } from "./services/gemini.js";
+import { Sparkles, BarChart2, Users, GitBranch, Clock, MessageSquare, Briefcase } from "lucide-react";
 
 const MODULE_IDS = ["match", "personas", "skillgap", "skilldecay", "interview", "jobs"];
 
@@ -30,47 +23,44 @@ const INITIAL_STATUS = {
 };
 
 const FEATURE_CARDS = [
-  { icon: BarChart2, label: "Match Score", color: "text-violet-500", bg: "bg-violet-50 border-violet-200" },
-  { icon: Users, label: "Recruiter Personas", color: "text-cyan-500", bg: "bg-cyan-50 border-cyan-200" },
-  { icon: GitBranch, label: "Skill Gap Analysis", color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-200" },
-  { icon: Clock, label: "Skill Decay Timeline", color: "text-amber-500", bg: "bg-amber-50 border-amber-200" },
-  { icon: MessageSquare, label: "Interview Prep", color: "text-rose-500", bg: "bg-rose-50 border-rose-200" },
-  { icon: Briefcase, label: "Job Discovery", color: "text-brand", bg: "bg-brand-light border-brand/20" },
+  { icon: BarChart2,     label: "Match Score",        color: "text-violet-500",  bg: "bg-violet-50 border-violet-200"   },
+  { icon: Users,         label: "Recruiter Personas",  color: "text-cyan-500",    bg: "bg-cyan-50 border-cyan-200"       },
+  { icon: GitBranch,     label: "Skill Gap Analysis",  color: "text-emerald-500", bg: "bg-emerald-50 border-emerald-200" },
+  { icon: Clock,         label: "Skill Decay Timeline",color: "text-amber-500",   bg: "bg-amber-50 border-amber-200"     },
+  { icon: MessageSquare, label: "Interview Prep",       color: "text-rose-500",    bg: "bg-rose-50 border-rose-200"       },
+  { icon: Briefcase,     label: "Job Discovery",        color: "text-brand",       bg: "bg-brand-light border-brand/20"   },
 ];
 
 export default function App() {
-  const [resume, setResume] = useState("");
-  const [jd, setJd] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasResults, setHasResults] = useState(false);
+  const [resume, setResume]           = useState("");
+  const [jd, setJd]                   = useState("");
+  const [isLoading, setIsLoading]     = useState(false);
+  const [hasResults, setHasResults]   = useState(false);
   const [activeModule, setActiveModule] = useState("match");
   const [moduleStatus, setModuleStatus] = useState(INITIAL_STATUS);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [results, setResults] = useState({
-    match: null,
-    personas: null,
-    skillgap: null,
-    skilldecay: null,
-    interview: null,
-    jobs: null,
+    match: null, personas: null, skillgap: null,
+    skilldecay: null, interview: null, jobs: null,
   });
 
   const sectionRefs = {
-    match: useRef(null),
-    personas: useRef(null),
-    skillgap: useRef(null),
+    match:      useRef(null),
+    personas:   useRef(null),
+    skillgap:   useRef(null),
     skilldecay: useRef(null),
-    interview: useRef(null),
-    jobs: useRef(null),
+    interview:  useRef(null),
+    jobs:       useRef(null),
   };
 
-  const setStatus = (id, status) =>
-    setModuleStatus((prev) => ({ ...prev, [id]: status }));
+  const setAllStatus = (status) =>
+    setModuleStatus(Object.fromEntries(MODULE_IDS.map((id) => [id, status])));
 
-  const setResult = (id, data) =>
-    setResults((prev) => ({ ...prev, [id]: data }));
+  const setAllResults = (data) =>
+    setResults(data);
 
+  // ─── Main analysis — 1 API call, all 6 modules ───────────────────────────
   const handleAnalyze = async () => {
     if (!resume.trim() || !jd.trim()) return;
 
@@ -79,31 +69,44 @@ export default function App() {
     setActiveModule("match");
     setSidebarOpen(false);
 
-    MODULE_IDS.forEach((id) => setStatus(id, "loading"));
-    MODULE_IDS.forEach((id) => setResult(id, null));
+    // Show all modules as loading immediately
+    setAllStatus("loading");
+    setAllResults({ match: null, personas: null, skillgap: null, skilldecay: null, interview: null, jobs: null });
 
-    const run = async (id, fn) => {
-      try {
-        const data = await fn();
-        setResult(id, data);
-        setStatus(id, "done");
-      } catch (e) {
-        setResult(id, { error: e.message });
-        setStatus(id, "error");
-      }
-    };
+    try {
+      const data = await analyzeAll(resume, jd);
 
-    // All 6 run in parallel — TEST 13 compliance
-    await Promise.all([
-      run("match", () => analyzeMatchScore(resume, jd)),
-      run("personas", () => analyzePersonas(resume, jd)),
-      run("skillgap", () => analyzeSkillGap(resume, jd)),
-      run("skilldecay", () => analyzeSkillDecay(resume, jd)),
-      run("interview", () => analyzeInterviewQuestions(resume, jd)),
-      run("jobs", () => analyzeJobDiscovery(resume)),
-    ]);
+      // Set each module result and mark done as they arrive (all at once from one call)
+      setResults(data);
+      setAllStatus("done");
+    } catch (e) {
+      // If the single call fails, mark all modules as errored
+      const errResult = { error: e.message };
+      setResults({
+        match: errResult, personas: errResult, skillgap: errResult,
+        skilldecay: errResult, interview: errResult, jobs: errResult,
+      });
+      setAllStatus("error");
+    }
 
     setIsLoading(false);
+  };
+
+  // ─── Retry — re-runs the full single call and restores all modules ────────
+  const handleRetry = async (id) => {
+    // Mark just this module as loading, keep others intact
+    setModuleStatus((prev) => ({ ...prev, [id]: "loading" }));
+    setResults((prev) => ({ ...prev, [id]: null }));
+
+    try {
+      const data = await analyzeAll(resume, jd);
+      // Restore all modules from the fresh call
+      setResults(data);
+      setAllStatus("done");
+    } catch (e) {
+      setResults((prev) => ({ ...prev, [id]: { error: e.message } }));
+      setModuleStatus((prev) => ({ ...prev, [id]: "error" }));
+    }
   };
 
   const handleSample = () => {
@@ -117,29 +120,6 @@ export default function App() {
     setTimeout(() => {
       sectionRefs[id]?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 50);
-  };
-
-  const handleRetry = async (id) => {
-    setStatus(id, "loading");
-    setResult(id, null);
-
-    const fns = {
-      match: () => analyzeMatchScore(resume, jd),
-      personas: () => analyzePersonas(resume, jd),
-      skillgap: () => analyzeSkillGap(resume, jd),
-      skilldecay: () => analyzeSkillDecay(resume, jd),
-      interview: () => analyzeInterviewQuestions(resume, jd),
-      jobs: () => analyzeJobDiscovery(resume),
-    };
-
-    try {
-      const data = await fns[id]();
-      setResult(id, data);
-      setStatus(id, "done");
-    } catch (e) {
-      setResult(id, { error: e.message });
-      setStatus(id, "error");
-    }
   };
 
   const overallScore = results.match?.overall ?? null;
@@ -157,7 +137,7 @@ export default function App() {
         />
       )}
 
-      {/* Sidebar — hidden on mobile unless open */}
+      {/* Sidebar */}
       <div
         className={`
           fixed md:static inset-y-0 left-0 z-40 md:z-auto
@@ -190,15 +170,11 @@ export default function App() {
         />
 
         <main className="flex-1 p-4 md:p-6 space-y-6 overflow-y-auto relative">
-          {/* Background orbs — decorative */}
-          <div
-            className="orb w-96 h-96 bg-violet-400 pointer-events-none"
-            style={{ position: "fixed", top: "-10%", right: "-5%", zIndex: 0 }}
-          />
-          <div
-            className="orb w-64 h-64 bg-emerald-400 pointer-events-none"
-            style={{ position: "fixed", bottom: "10%", left: "-5%", zIndex: 0 }}
-          />
+          {/* Background orbs */}
+          <div className="orb w-96 h-96 bg-violet-400 pointer-events-none"
+            style={{ position: "fixed", top: "-10%", right: "-5%", zIndex: 0 }} />
+          <div className="orb w-64 h-64 bg-emerald-400 pointer-events-none"
+            style={{ position: "fixed", bottom: "10%", left: "-5%", zIndex: 0 }} />
 
           {/* Welcome screen */}
           {!hasResults && (
@@ -224,7 +200,6 @@ export default function App() {
                 intelligence report.
               </p>
 
-              {/* Mobile: show analyze button inline */}
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="md:hidden mb-6 flex items-center gap-2 bg-gradient-brand text-white text-[13px] font-semibold rounded-xl px-5 py-2.5 shadow-glow"
@@ -248,7 +223,7 @@ export default function App() {
               </div>
 
               <p className="text-[11px] text-ink-muted mt-8">
-                Powered by Google Gemini 2.0 Flash · Free to use
+                Powered by Google Gemini 2.0 Flash · 1 API call · Free to use
               </p>
             </div>
           )}
