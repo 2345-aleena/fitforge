@@ -6,7 +6,7 @@
 
 **Know your fit. Close the gap.**
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Visit%20App-6C5FE6?style=for-the-badge&logo=vercel)](YOUR_VERCEL_LINK_HERE)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Visit%20App-6C5FE6?style=for-the-badge&logo=vercel)](https://fitforge-czz892qcz-2345-aleenas-projects.vercel.app/)
 [![Built With](https://img.shields.io/badge/Built%20With-React%20%2B%20Gemini-blue?style=for-the-badge&logo=react)](https://github.com/2345-aleena/fitforge)
 [![Hackathon](https://img.shields.io/badge/Code%20With%20Kiro-Hackathon%202026-orange?style=for-the-badge)](https://github.com/2345-aleena/fitforge)
 
