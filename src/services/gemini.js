@@ -1,7 +1,7 @@
-// ─── Direct REST API — bypasses SDK's hardcoded v1beta endpoint ───────────────
-// Uses v1 which is what free API keys support
+// ─── Direct REST API — uses v1 endpoint with gemini-2.0-flash ────────────────
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const MODEL = "gemini-2.0-flash";
 
 if (!API_KEY || API_KEY === "your_gemini_api_key_here") {
   console.error(
@@ -11,16 +11,9 @@ if (!API_KEY || API_KEY === "your_gemini_api_key_here") {
   );
 }
 
-// Models available on this API key (confirmed via ListModels)
-const MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-001",
-  "gemini-1.5-flash",
-];
-
 // ─── Core fetch caller ────────────────────────────────────────────────────────
-async function callGeminiREST(prompt, modelName) {
-  const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${API_KEY}`;
+async function callGeminiREST(prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${API_KEY}`;
 
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -86,7 +79,6 @@ function extractJSON(text) {
     const end = cleaned.lastIndexOf(endChar);
     if (end > start) {
       let slice = cleaned.slice(start, end + 1);
-      // Fix trailing commas
       slice = slice.replace(/,(\s*[}\]])/g, "$1");
       try { return JSON.parse(slice); } catch (_) {}
     }
@@ -97,43 +89,10 @@ function extractJSON(text) {
   );
 }
 
-// ─── Main caller: tries each model with retries ───────────────────────────────
+// ─── Single caller — gemini-2.0-flash only ───────────────────────────────────
 async function callGemini(prompt) {
-  let lastError;
-
-  for (const model of MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const text = await callGeminiREST(prompt, model);
-        const parsed = extractJSON(text);
-        console.log(`✓ ${model} responded successfully`);
-        return parsed;
-      } catch (e) {
-        lastError = e;
-        const msg = e.message ?? "";
-
-        // Model not found on this key — try next model immediately
-        if (msg.includes("404") || msg.includes("not found") || msg.includes("not supported")) {
-          console.warn(`Model ${model} not available, trying next...`);
-          break;
-        }
-
-        // Rate limit — wait before retry
-        if (msg.includes("429") || msg.includes("quota")) {
-          console.warn(`Rate limited on ${model}, waiting...`);
-          await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
-          continue;
-        }
-
-        // Other error — short wait then retry once
-        if (attempt === 0) {
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-      }
-    }
-  }
-
-  throw lastError || new Error("All Gemini models failed");
+  const text = await callGeminiREST(prompt);
+  return extractJSON(text);
 }
 
 // ─── Module 1: Match Score ────────────────────────────────────────────────────
