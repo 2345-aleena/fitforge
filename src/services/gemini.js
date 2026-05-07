@@ -15,7 +15,7 @@ if (!API_KEY || API_KEY === "your_gemini_api_key_here") {
 const MODELS = [
   "gemini-2.0-flash",
   "gemini-2.0-flash-001",
-  "gemini-2.5-flash",
+  "gemini-1.5-flash",
 ];
 
 // ─── Core fetch caller ────────────────────────────────────────────────────────
