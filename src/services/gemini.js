@@ -1,7 +1,10 @@
 // ─── Single combined Gemini call — 1 API request for all 6 modules ───────────
+// Uses gemini-2.0-flash-lite (higher free-tier quota, lower token cost)
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const MODEL = "gemini-2.0-flash";
+
+// gemini-2.0-flash-lite has a much higher free-tier quota than gemini-2.0-flash
+const MODEL = "gemini-2.0-flash-lite";
 
 if (!API_KEY || API_KEY === "your_gemini_api_key_here") {
   console.error(
@@ -11,33 +14,64 @@ if (!API_KEY || API_KEY === "your_gemini_api_key_here") {
   );
 }
 
-// ─── Core fetch caller ────────────────────────────────────────────────────────
+// ─── Core fetch caller with 429 retry ────────────────────────────────────────
 async function callGeminiREST(prompt) {
   const url = `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${API_KEY}`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        topP: 0.85,
-        topK: 40,
-        maxOutputTokens: 8192,
-      },
-    }),
-  });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          topP: 0.85,
+          topK: 40,
+          maxOutputTokens: 8192,
+        },
+      }),
+    });
 
-  if (!response.ok) {
+    if (response.ok) {
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("Empty response from Gemini API");
+      return text;
+    }
+
     const errText = await response.text();
+
+    // On 429, parse the retry delay from the error and wait
+    if (response.status === 429) {
+      let waitMs = 35000; // default 35s
+      try {
+        const errJson = JSON.parse(errText);
+        const retryInfo = errJson?.error?.details?.find(
+          (d) => d["@type"]?.includes("RetryInfo")
+        );
+        if (retryInfo?.retryDelay) {
+          // retryDelay is like "31s" or "31.67s"
+          const seconds = parseFloat(retryInfo.retryDelay.replace("s", ""));
+          waitMs = Math.ceil(seconds * 1000) + 2000; // add 2s buffer
+        }
+      } catch (_) {}
+
+      if (attempt < 2) {
+        console.warn(`Rate limited. Waiting ${waitMs / 1000}s before retry ${attempt + 1}...`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+
+      // Final attempt failed — throw a user-friendly message
+      throw new Error(
+        `API quota exceeded. Please wait a minute and try again, or get a new API key at https://aistudio.google.com/app/apikey`
+      );
+    }
+
+    // Any other error — throw immediately
     throw new Error(`HTTP ${response.status}: ${errText}`);
   }
-
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response from Gemini API");
-  return text;
 }
 
 // ─── Robust JSON extractor ────────────────────────────────────────────────────
@@ -98,23 +132,22 @@ Required structure:
     "verdict": "<short phrase e.g. Strong Match or Significant Gaps>",
     "summary": "<2-3 sentences analyzing the fit using actual resume details>"
   },
-
   "personas": {
     "personas": [
       {
         "type": "Startup CTO",
         "avatar": "CT",
         "verdict": "<Pass|Maybe|Lean No|No>",
-        "monologue": "<3-4 sentences of internal thinking referencing specific resume details>",
-        "impressed": ["<specific positive from resume>", "<another>"],
-        "concerns": ["<specific concern from JD gap>", "<another>"],
+        "monologue": "<3-4 sentences referencing specific resume details>",
+        "impressed": ["<specific positive>", "<another>"],
+        "concerns": ["<specific concern>", "<another>"],
         "likelihood": <integer 0-100>
       },
       {
         "type": "HR Generalist",
         "avatar": "HR",
         "verdict": "<Pass|Maybe|Lean No|No>",
-        "monologue": "<3-4 sentences about experience years, titles, keywords>",
+        "monologue": "<3-4 sentences about experience, titles, keywords>",
         "impressed": ["<keyword match>", "<education or tenure>"],
         "concerns": ["<experience gap>", "<missing keyword>"],
         "likelihood": <integer 0-100>
@@ -123,83 +156,78 @@ Required structure:
         "type": "Ex-FAANG Screener",
         "avatar": "FG",
         "verdict": "<Pass|Maybe|Lean No|No>",
-        "monologue": "<3-4 sentences about scale, system design, technical depth>",
+        "monologue": "<3-4 sentences about scale, system design, depth>",
         "impressed": ["<scale metric or strong signal>"],
         "concerns": ["<system design gap>", "<scale concern>"],
         "likelihood": <integer 0-100>
       }
     ]
   },
-
   "skillGap": {
     "skills": [
       {
         "name": "<skill name from JD>",
         "status": "<present|weak|missing>",
         "importance": "<required|preferred>",
-        "note": "<one sentence explanation>"
+        "note": "<one sentence>"
       }
     ],
     "rewrites": [
       {
         "original": "<exact bullet from resume>",
-        "improved": "<rewritten with metrics, tech, and impact>",
+        "improved": "<rewritten with metrics and impact>",
         "reason": "<why this improves the match>"
       }
     ]
   },
-
   "skillDecay": {
     "skills": [
       {
-        "name": "<skill name>",
-        "lastUsed": <year as integer>,
+        "name": "<skill>",
+        "lastUsed": <year integer>,
         "status": "<fresh|aging|stale>",
         "inJD": <true|false>
       }
     ],
-    "riskSummary": "<describe stale skills required by JD, or null>"
+    "riskSummary": "<stale skills required by JD, or null>"
   },
-
   "interviewQuestions": {
     "questions": [
       {
-        "question": "<specific interview question>",
-        "why": "<why this will be asked, referencing specific gap>",
+        "question": "<interview question>",
+        "why": "<why asked, referencing gap>",
         "difficulty": "<Standard|Probing|Curveball>",
         "starFramework": {
-          "situation": "<specific context from resume>",
-          "task": "<challenge to frame answer around>",
-          "action": "<technical actions to describe>",
-          "result": "<outcome or metric to highlight>"
+          "situation": "<context from resume>",
+          "task": "<challenge to frame>",
+          "action": "<technical actions>",
+          "result": "<outcome or metric>"
         },
-        "anchorExperience": "<specific project or role from resume>"
+        "anchorExperience": "<project or role from resume>"
       }
     ]
   },
-
   "jobDiscovery": {
     "roles": [
       {
         "title": "<job title>",
-        "company_type": "<type of company>",
+        "company_type": "<company type>",
         "fit": <integer 0-100>,
         "tier": "<primary|adjacent|stretch>",
-        "signals": ["<signal from resume>", "<another signal>"],
-        "why_unexpected": "<explanation for non-obvious roles, or null>"
+        "signals": ["<signal>", "<signal>"],
+        "why_unexpected": "<explanation or null>"
       }
     ]
   }
 }
 
 Rules:
-- matchScore.overall must be a weighted average of the 4 sub-scores
-- skillGap.skills must include ALL skills mentioned in the JD
-- skillGap.rewrites must include 2-3 rewrites of actual resume bullets
-- skillDecay.skills must list every skill from the resume; current year is ${currentYear}; fresh = last 2 years, aging = 2-4 years ago, stale = 4+ years ago
-- interviewQuestions.questions must contain exactly 6 questions
-- jobDiscovery.roles must contain exactly 9 roles: 3 primary, 3 adjacent, 3 stretch
-- personas verdicts should differ: one Pass, one Maybe, one Lean No or No
+- matchScore.overall = weighted average of the 4 sub-scores
+- skillGap.skills = ALL skills from the JD; provide 2-3 rewrites of actual resume bullets
+- skillDecay: current year is ${currentYear}; fresh = last 2 years, aging = 2-4 years, stale = 4+ years; list every resume skill
+- interviewQuestions: exactly 6 questions
+- jobDiscovery: exactly 9 roles — 3 primary, 3 adjacent, 3 stretch
+- personas verdicts must differ: one Pass, one Maybe, one Lean No or No
 
 RESUME:
 ${resume}
@@ -210,13 +238,12 @@ ${jd}`;
   const text = await callGeminiREST(prompt);
   const parsed = extractJSON(text);
 
-  // Return each module's data keyed the same way App.jsx expects
   return {
-    match: parsed.matchScore,
-    personas: parsed.personas,
-    skillgap: parsed.skillGap,
+    match:      parsed.matchScore,
+    personas:   parsed.personas,
+    skillgap:   parsed.skillGap,
     skilldecay: parsed.skillDecay,
-    interview: parsed.interviewQuestions,
-    jobs: parsed.jobDiscovery,
+    interview:  parsed.interviewQuestions,
+    jobs:       parsed.jobDiscovery,
   };
 }

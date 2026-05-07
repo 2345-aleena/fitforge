@@ -80,8 +80,11 @@ export default function App() {
       setResults(data);
       setAllStatus("done");
     } catch (e) {
-      // If the single call fails, mark all modules as errored
-      const errResult = { error: e.message };
+      // Surface a clean message for quota errors
+      const msg = e.message?.includes("quota exceeded") || e.message?.includes("429")
+        ? "API quota exceeded. Wait 1 minute then click Retry, or get a fresh API key at https://aistudio.google.com/app/apikey"
+        : e.message;
+      const errResult = { error: msg };
       setResults({
         match: errResult, personas: errResult, skillgap: errResult,
         skilldecay: errResult, interview: errResult, jobs: errResult,
