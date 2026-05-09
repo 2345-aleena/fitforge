@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Badge from "../ui/Badge.jsx";
+import KeyInsight from "../KeyInsight.jsx";
 import { RefreshCw, AlertTriangle, Clock } from "lucide-react";
 
 function getStatusConfig(status) {
@@ -89,13 +90,14 @@ export default function SkillDecay({ data, isLoading, onRetry }) {
 
   return (
     <div className="bg-white rounded-2xl border border-cream-border p-6 shadow-3d animate-slide-up">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-[16px] font-bold text-ink">Skill Decay Timeline</h2>
           <p className="text-[12px] text-ink-muted mt-0.5">Freshness of skills based on last usage</p>
         </div>
         <Clock size={18} className="text-amber-500" />
       </div>
+      <KeyInsight text={data.keyInsight} />
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-5">

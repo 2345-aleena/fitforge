@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Badge from "../ui/Badge.jsx";
+import KeyInsight from "../KeyInsight.jsx";
 import { RefreshCw, ArrowRight, CheckCircle, AlertCircle, XCircle } from "lucide-react";
 
 function getSkillConfig(status) {
@@ -81,12 +82,13 @@ export default function SkillGap({ data, isLoading, onRetry }) {
 
   return (
     <div className="bg-white rounded-2xl border border-cream-border p-6 shadow-3d animate-slide-up">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-[16px] font-bold text-ink">Skill Gap Analysis</h2>
           <p className="text-[12px] text-ink-muted mt-0.5">Skills mapped against job requirements</p>
         </div>
       </div>
+      <KeyInsight text={data.keyInsight} />
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3 mb-6">

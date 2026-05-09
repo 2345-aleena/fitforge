@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Badge from "../ui/Badge.jsx";
 import ProgressBar from "../ui/ProgressBar.jsx";
+import KeyInsight from "../KeyInsight.jsx";
 import { RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 
 const PERSONA_THEMES = [
@@ -170,12 +171,13 @@ export default function PersonaSimulator({ data, isLoading, onRetry }) {
 
   return (
     <div className="bg-white rounded-2xl border border-cream-border p-6 shadow-3d animate-slide-up">
-      <div className="mb-6">
+      <div className="mb-4">
         <h2 className="text-[16px] font-bold text-ink">Recruiter Persona Simulator</h2>
         <p className="text-[12px] text-ink-muted mt-0.5">
           How 3 different recruiters react to your resume
         </p>
       </div>
+      <KeyInsight text={data.keyInsight} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {data.personas?.map((persona, i) => (
           <PersonaCard key={i} persona={persona} theme={PERSONA_THEMES[i % PERSONA_THEMES.length]} index={i} />

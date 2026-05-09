@@ -1,7 +1,7 @@
 import { Zap, TrendingUp, Menu } from "lucide-react";
 import Badge from "./ui/Badge.jsx";
 
-export default function TopBar({ overallScore, isLoading, hasResults, onMenuClick }) {
+export default function TopBar({ currentStep, overallScore, moduleLoading, onMenuClick }) {
   const getVerdict = (score) => {
     if (score >= 75) return { label: "Strong Match", variant: "gradient-green" };
     if (score >= 50) return { label: "Partial Match", variant: "gradient-amber" };
@@ -29,34 +29,39 @@ export default function TopBar({ overallScore, isLoading, hasResults, onMenuClic
           <span className="font-bold text-ink text-[14px]">FitForge</span>
         </div>
 
-        {isLoading && (
+        {moduleLoading && (
           <div className="hidden sm:flex items-center gap-2 text-ink-muted text-[12px]">
             <span className="w-3 h-3 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-            Running AI analysis...
+            Analyzing...
           </div>
         )}
       </div>
 
-      {hasResults && overallScore && (
-        <div className="flex items-center gap-2 md:gap-4">
-          <div className="flex items-center gap-2 md:gap-3 bg-white rounded-xl px-3 md:px-4 py-2 shadow-card border border-cream-border">
-            <TrendingUp size={15} className="text-brand hidden sm:block" />
-            <div className="flex items-center gap-1.5 md:gap-2">
-              <span className="text-[10px] text-ink-muted uppercase tracking-widest font-semibold hidden sm:block">
-                Overall Fit
-              </span>
-              <span className="text-xl md:text-2xl font-bold gradient-text score-number">
-                {overallScore}%
-              </span>
-            </div>
+      <div className="flex items-center gap-2 md:gap-4">
+        {/* Step counter */}
+        {currentStep > 0 && (
+          <span className="text-[11px] text-ink-muted font-medium hidden sm:block">
+            Step {currentStep} of 6
+          </span>
+        )}
+
+        {/* Overall score — shown once match score is done */}
+        {overallScore && (
+          <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-1.5 shadow-card border border-cream-border">
+            <TrendingUp size={14} className="text-brand hidden sm:block" />
+            <span className="text-[10px] text-ink-muted uppercase tracking-widest font-semibold hidden sm:block">
+              Fit
+            </span>
+            <span className="text-lg font-bold gradient-text score-number">{overallScore}%</span>
           </div>
-          {verdict && (
-            <Badge variant={verdict.variant} size="md" className="hidden sm:inline-flex">
-              {verdict.label}
-            </Badge>
-          )}
-        </div>
-      )}
+        )}
+
+        {verdict && (
+          <Badge variant={verdict.variant} size="sm" className="hidden sm:inline-flex">
+            {verdict.label}
+          </Badge>
+        )}
+      </div>
     </header>
   );
 }

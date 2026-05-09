@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ScoreRing from "../ui/ScoreRing.jsx";
 import ProgressBar from "../ui/ProgressBar.jsx";
 import Badge from "../ui/Badge.jsx";
+import KeyInsight from "../KeyInsight.jsx";
 import { RefreshCw, TrendingUp, Zap, Award, MessageCircle, BarChart2 } from "lucide-react";
 
 const METRICS = [
@@ -99,7 +100,7 @@ export default function MatchScore({ data, isLoading, onRetry }) {
   return (
     <div className="bg-white rounded-2xl border border-cream-border p-6 shadow-3d animate-slide-up">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-[16px] font-bold text-ink">Match Score Dashboard</h2>
           <p className="text-[12px] text-ink-muted mt-0.5">AI-powered fit analysis</p>
@@ -108,6 +109,8 @@ export default function MatchScore({ data, isLoading, onRetry }) {
           {data.verdict}
         </Badge>
       </div>
+
+      <KeyInsight text={data.keyInsight} />
 
       {/* Score ring + summary */}
       <div className="flex flex-col sm:flex-row items-center gap-8 mb-8 p-5 bg-gradient-to-br from-cream-50 to-brand-light/30 rounded-2xl border border-cream-border">

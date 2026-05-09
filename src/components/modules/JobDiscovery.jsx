@@ -1,32 +1,12 @@
 import Badge from "../ui/Badge.jsx";
 import ProgressBar from "../ui/ProgressBar.jsx";
+import KeyInsight from "../KeyInsight.jsx";
 import { RefreshCw, Sparkles, TrendingUp, Target, Rocket } from "lucide-react";
 
 const TIER_CONFIG = {
-  primary: {
-    label: "Direct Match",
-    description: "Roles you're clearly qualified for",
-    icon: Target,
-    color: "text-emerald-600",
-    bg: "bg-emerald-50 border-emerald-200",
-    badge: "gradient-green",
-  },
-  adjacent: {
-    label: "Adjacent Roles",
-    description: "Transferable skills open these doors",
-    icon: TrendingUp,
-    color: "text-amber-600",
-    bg: "bg-amber-50 border-amber-200",
-    badge: "gradient-amber",
-  },
-  stretch: {
-    label: "Stretch Roles",
-    description: "One gap to close",
-    icon: Rocket,
-    color: "text-violet-600",
-    bg: "bg-violet-50 border-violet-200",
-    badge: "gradient",
-  },
+  primary:  { label: "Direct Match",   description: "Roles you're clearly qualified for",    icon: Target,   color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200", badge: "gradient-green"  },
+  adjacent: { label: "Adjacent Roles", description: "Transferable skills open these doors",   icon: TrendingUp,color: "text-amber-600",  bg: "bg-amber-50 border-amber-200",   badge: "gradient-amber"  },
+  stretch:  { label: "Stretch Roles",  description: "One gap to close",                       icon: Rocket,   color: "text-violet-600", bg: "bg-violet-50 border-violet-200", badge: "gradient"        },
 };
 
 function getFitColor(fit) {
@@ -37,6 +17,9 @@ function getFitColor(fit) {
 
 function RoleCard({ role, index }) {
   const fitColor = getFitColor(role.fit);
+  // support both old (company_type/why_unexpected) and new (companyType/whyUnexpected) shapes
+  const companyType   = role.companyType   ?? role.company_type;
+  const whyUnexpected = role.whyUnexpected ?? role.why_unexpected;
 
   return (
     <div
@@ -46,36 +29,26 @@ function RoleCard({ role, index }) {
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
           <h4 className="text-[14px] font-bold text-ink leading-snug">{role.title}</h4>
-          <p className="text-[11px] text-ink-muted mt-0.5">{role.company_type}</p>
+          <p className="text-[11px] text-ink-muted mt-0.5">{companyType}</p>
         </div>
         <div className="text-right shrink-0">
-          <span className="text-[26px] font-bold score-number" style={{ color: fitColor }}>
-            {role.fit}
-          </span>
+          <span className="text-[26px] font-bold score-number" style={{ color: fitColor }}>{role.fit}</span>
           <p className="text-[10px] text-ink-muted font-semibold uppercase tracking-wide">fit</p>
         </div>
       </div>
 
       <ProgressBar value={role.fit} color={fitColor} height={5} className="mb-3" gradient animated />
 
-      {/* Signals */}
       {role.signals?.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-3">
-          {role.signals.map((signal, i) => (
-            <Badge key={i} variant="neutral" size="xs">
-              {signal}
-            </Badge>
-          ))}
+          {role.signals.map((s, i) => <Badge key={i} variant="neutral" size="xs">{s}</Badge>)}
         </div>
       )}
 
-      {/* Why unexpected */}
-      {role.why_unexpected && (
+      {whyUnexpected && (
         <div className="flex items-start gap-2 mt-3 bg-brand-light/40 rounded-xl p-2.5 border border-brand/15">
           <Sparkles size={12} className="text-brand shrink-0 mt-0.5" />
-          <p className="text-[11px] text-brand-text italic leading-relaxed font-medium">
-            {role.why_unexpected}
-          </p>
+          <p className="text-[11px] text-brand-text italic leading-relaxed font-medium">{whyUnexpected}</p>
         </div>
       )}
     </div>
@@ -91,9 +64,7 @@ export default function JobDiscovery({ data, isLoading, onRetry }) {
           <span className="text-[14px] font-semibold text-ink">Passive Job Discovery</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-40 shimmer-bg rounded-2xl" />
-          ))}
+          {[1,2,3,4,5,6].map((i) => <div key={i} className="h-40 shimmer-bg rounded-2xl" />)}
         </div>
       </div>
     );
@@ -105,36 +76,31 @@ export default function JobDiscovery({ data, isLoading, onRetry }) {
         <div className="flex items-center justify-between mb-4">
           <span className="text-[14px] font-semibold text-ink">Passive Job Discovery</span>
           <button onClick={onRetry} className="flex items-center gap-1.5 text-[12px] text-brand font-medium">
-            <RefreshCw size={13} /> Retry
+            <RefreshCw size={13} /> Reanalyze
           </button>
         </div>
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-700 text-[13px]">
-          Analysis failed: {data.error}
-        </div>
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-700 text-[13px]">{data.error}</div>
       </div>
     );
   }
 
   if (!data) return null;
 
-  const tiers = ["primary", "adjacent", "stretch"];
-
   return (
     <div className="bg-white rounded-2xl border border-cream-border p-6 shadow-3d animate-slide-up">
-      <div className="mb-6">
+      <div className="mb-4">
         <h2 className="text-[16px] font-bold text-ink">Passive Job Discovery</h2>
-        <p className="text-[12px] text-ink-muted mt-0.5">
-          Roles you're a fit for — including ones you might not have considered
-        </p>
+        <p className="text-[12px] text-ink-muted mt-0.5">Roles you fit — including ones you haven't considered</p>
       </div>
 
+      <KeyInsight text={data.keyInsight} />
+
       <div className="space-y-8">
-        {tiers.map((tier) => {
+        {["primary", "adjacent", "stretch"].map((tier) => {
           const roles = (data.roles ?? []).filter((r) => r.tier === tier);
-          if (roles.length === 0) return null;
+          if (!roles.length) return null;
           const config = TIER_CONFIG[tier];
           const Icon = config.icon;
-
           return (
             <div key={tier}>
               <div className={`flex items-center gap-3 mb-4 p-3 rounded-xl border ${config.bg}`}>
@@ -145,14 +111,10 @@ export default function JobDiscovery({ data, isLoading, onRetry }) {
                   <h3 className="text-[13px] font-bold text-ink">{config.label}</h3>
                   <p className="text-[11px] text-ink-muted">{config.description}</p>
                 </div>
-                <Badge variant={config.badge} size="xs">
-                  {roles.length} roles
-                </Badge>
+                <Badge variant={config.badge} size="xs">{roles.length} roles</Badge>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {roles.map((role, i) => (
-                  <RoleCard key={i} role={role} index={i} />
-                ))}
+                {roles.map((role, i) => <RoleCard key={i} role={role} index={i} />)}
               </div>
             </div>
           );
