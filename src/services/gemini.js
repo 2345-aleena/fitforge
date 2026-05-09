@@ -1,50 +1,118 @@
-// ─── 6 individual focused Gemini calls — one per module ──────────────────────
-// Uses gemini-2.0-flash-lite for maximum free-tier quota
-// Each prompt is small and focused — no mega-prompts
+// ─── AI Service — Gemini primary, Groq fallback ───────────────────────────────
+// Tries Gemini (gemini-2.0-flash-lite) first.
+// If Gemini hits a 429 quota error, automatically falls back to Groq (llama-3.3-70b).
+// Groq is completely free with very high rate limits.
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const MODEL = "gemini-2.0-flash-lite";
+const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GROQ_KEY   = import.meta.env.VITE_GROQ_API_KEY;
 
-if (!API_KEY || API_KEY === "your_gemini_api_key_here") {
-  console.error("⚠️  VITE_GEMINI_API_KEY is not set in .env");
+// Gemini models to try in order (lite = highest free quota)
+const GEMINI_MODELS = [
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash-001",
+  "gemini-2.5-flash-lite",
+];
+
+// Groq model — llama-3.3-70b is fast, accurate, and free
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+
+// ─── Gemini caller ────────────────────────────────────────────────────────────
+async function callGemini(prompt) {
+  let lastError;
+
+  for (const model of GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${GEMINI_KEY}`;
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, topP: 0.85, topK: 40, maxOutputTokens: 4096 },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error("Empty response from Gemini");
+        console.log(`✓ Gemini (${model}) responded`);
+        return text;
+      }
+
+      const errText = await response.text();
+
+      if (response.status === 404) {
+        console.warn(`Gemini model ${model} not available, trying next...`);
+        lastError = new Error(`404: ${model} not available`);
+        continue;
+      }
+
+      if (response.status === 429) {
+        console.warn(`Gemini quota exceeded on ${model}`);
+        // All Gemini models share the same quota — no point trying others
+        throw new Error("GEMINI_QUOTA_EXCEEDED");
+      }
+
+      throw new Error(`Gemini HTTP ${response.status}: ${errText.slice(0, 150)}`);
+    } catch (e) {
+      if (e.message === "GEMINI_QUOTA_EXCEEDED") throw e;
+      if (e.message?.startsWith("Gemini HTTP")) throw e;
+      lastError = e;
+    }
+  }
+
+  throw lastError || new Error("All Gemini models failed");
 }
 
-// ─── Core fetch ───────────────────────────────────────────────────────────────
-async function callGemini(prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${API_KEY}`;
+// ─── Groq caller (fallback) ───────────────────────────────────────────────────
+async function callGroq(prompt) {
+  if (!GROQ_KEY || GROQ_KEY === "your_groq_api_key_here") {
+    throw new Error(
+      "Groq API key not set. Add VITE_GROQ_API_KEY to your .env file.\n" +
+      "Get a free key at: https://console.groq.com/keys"
+    );
+  }
 
-  const response = await fetch(url, {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${GROQ_KEY}`,
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2, topP: 0.85, topK: 40, maxOutputTokens: 4096 },
+      model: GROQ_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "You are an expert career analyst. Always respond with valid JSON only. No markdown fences, no explanation, no extra text. Start your response with { and end with }.",
+        },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 4096,
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text();
     if (response.status === 429) {
-      // Parse retry delay if available
-      let wait = 35;
-      try {
-        const j = JSON.parse(errText);
-        const ri = j?.error?.details?.find((d) => d["@type"]?.includes("RetryInfo"));
-        if (ri?.retryDelay) wait = Math.ceil(parseFloat(ri.retryDelay)) + 3;
-      } catch (_) {}
-      throw new Error(`429:${wait}`); // signal to retry logic
+      throw new Error("Groq rate limit hit. Please wait a moment and click Reanalyze.");
     }
-    throw new Error(`HTTP ${response.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`Groq HTTP ${response.status}: ${errText.slice(0, 150)}`);
   }
 
   const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Empty response from Gemini");
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Empty response from Groq");
+  console.log(`✓ Groq (${GROQ_MODEL}) responded`);
   return text;
 }
 
 // ─── JSON extractor ───────────────────────────────────────────────────────────
 function parseJSON(text) {
+  if (!text) throw new Error("Empty response");
   try { return JSON.parse(text.trim()); } catch (_) {}
   const cleaned = text.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
   try { return JSON.parse(cleaned); } catch (_) {}
@@ -52,29 +120,30 @@ function parseJSON(text) {
   if (s !== -1 && e > s) {
     try { return JSON.parse(cleaned.slice(s, e + 1).replace(/,(\s*[}\]])/g, "$1")); } catch (_) {}
   }
-  throw new Error("Could not parse JSON from response: " + text.slice(0, 150));
+  throw new Error("Could not parse JSON from AI response: " + text.slice(0, 150));
 }
 
-// ─── Retry wrapper — handles 429 with wait ───────────────────────────────────
-async function callWithRetry(prompt, retries = 2) {
-  for (let i = 0; i <= retries; i++) {
+// ─── Main caller — Gemini first, Groq fallback ────────────────────────────────
+async function callAI(prompt) {
+  // Try Gemini first
+  if (GEMINI_KEY && GEMINI_KEY !== "your_gemini_api_key_here") {
     try {
       const text = await callGemini(prompt);
       return parseJSON(text);
-    } catch (err) {
-      const msg = err.message ?? "";
-      if (msg.startsWith("429:") && i < retries) {
-        const secs = parseInt(msg.split(":")[1]) || 35;
-        console.warn(`Rate limited. Waiting ${secs}s...`);
-        await new Promise((r) => setTimeout(r, secs * 1000));
-        continue;
+    } catch (e) {
+      if (e.message === "GEMINI_QUOTA_EXCEEDED") {
+        console.warn("Gemini quota exceeded — switching to Groq fallback...");
+        // Fall through to Groq
+      } else {
+        // Non-quota Gemini error — still try Groq before giving up
+        console.warn("Gemini failed:", e.message, "— trying Groq...");
       }
-      if (msg.startsWith("429:")) {
-        throw new Error("API limit reached. Please wait 30 seconds then click Reanalyze.");
-      }
-      throw err;
     }
   }
+
+  // Groq fallback
+  const text = await callGroq(prompt);
+  return parseJSON(text);
 }
 
 // ─── Module 1: Match Score ────────────────────────────────────────────────────
@@ -93,7 +162,7 @@ Return ONLY valid JSON, no markdown:
 }
 RESUME: ${resume.slice(0, 1500)}
 JD: ${jd.slice(0, 800)}`;
-  return callWithRetry(prompt);
+  return callAI(prompt);
 }
 
 // ─── Module 2: Recruiter Personas ────────────────────────────────────────────
@@ -128,7 +197,7 @@ Return ONLY valid JSON, no markdown:
 }
 RESUME: ${resume.slice(0, 1500)}
 JD: ${jd.slice(0, 800)}`;
-  return callWithRetry(prompt);
+  return callAI(prompt);
 }
 
 // ─── Module 3: Skill Gap ──────────────────────────────────────────────────────
@@ -153,7 +222,7 @@ Return ONLY valid JSON, no markdown:
 status: present|weak|missing. importance: required|preferred. Include ALL JD skills. 2-3 rewrites.
 RESUME: ${resume.slice(0, 1500)}
 JD: ${jd.slice(0, 800)}`;
-  return callWithRetry(prompt);
+  return callAI(prompt);
 }
 
 // ─── Module 4: Skill Decay ────────────────────────────────────────────────────
@@ -172,7 +241,7 @@ Return ONLY valid JSON, no markdown:
 Status: fresh = 2024+, aging = 2021-2023, stale = 2020 or earlier. List every resume skill.
 RESUME: ${resume.slice(0, 1500)}
 JD: ${jd.slice(0, 800)}`;
-  return callWithRetry(prompt);
+  return callAI(prompt);
 }
 
 // ─── Module 5: Interview Questions ───────────────────────────────────────────
@@ -199,7 +268,7 @@ Return ONLY valid JSON, no markdown:
 Difficulty: Standard, Probing, or Curveball. Provide exactly 5 questions.
 RESUME: ${resume.slice(0, 1500)}
 JD: ${jd.slice(0, 800)}`;
-  return callWithRetry(prompt);
+  return callAI(prompt);
 }
 
 // ─── Module 6: Job Discovery ──────────────────────────────────────────────────
@@ -229,5 +298,5 @@ Return ONLY valid JSON, no markdown:
 }
 Tier: primary (3 roles), adjacent (3 roles), stretch (2 roles). Total 8 roles.
 RESUME: ${resume.slice(0, 2000)}`;
-  return callWithRetry(prompt);
+  return callAI(prompt);
 }
