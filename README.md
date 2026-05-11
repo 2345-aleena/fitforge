@@ -161,7 +161,8 @@ Get your free key at [Google AI Studio](https://aistudio.google.com/app/apikey) 
 This project was built during the **Code with Kiro Hackathon 2026** — a competitive hackathon focused on building practical, innovative AI-powered applications using the Kiro IDE.
 
 - **Challenge:** AI Resume & Job Matching System
-- **Builder:** Aleena Sehar
+- **Builder:** Aleena Sehar & Shallena Akbar
+- 
 - **Time to build:** 1 hr 35 min
 
 ---
